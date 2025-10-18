@@ -1,12 +1,12 @@
-// src/components/Sales.jsx
 import { useEffect, useState } from "react";
+import jsPDF from "jspdf";
 
 const API = "http://localhost:5000/api/items";
 const SELL_API = "http://localhost:5000/api/sell";
 
 export default function Sales() {
   const [items, setItems] = useState([]);
-  const [cart, setCart] = useState([]); // {id, name, qty, price}
+  const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
@@ -42,11 +42,33 @@ export default function Sales() {
     }
   };
 
-  const removeFromCart = (id) => {
-    setCart(cart.filter(c => c.id !== id));
-  };
-
+  const removeFromCart = (id) => setCart(cart.filter(c => c.id !== id));
   const total = cart.reduce((s, c) => s + c.qty * c.price, 0);
+
+  // --- Generate PDF ---
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text("Smart Inventory Bill", 14, 20);
+    doc.setFontSize(12);
+    doc.text(`Date: ${new Date().toLocaleString()}`, 14, 28);
+
+    let y = 40;
+    doc.text("Items:", 14, y);
+    y += 6;
+
+    cart.forEach((c, idx) => {
+      doc.text(
+        `${idx+1}. ${c.name} - ${c.qty} × ₹${c.price} = ₹${(c.qty*c.price).toLocaleString()}`,
+        14,
+        y
+      );
+      y += 6;
+    });
+
+    doc.text(`Total: ₹${total.toLocaleString()}`, 14, y + 6);
+    doc.save(`Bill_${new Date().getTime()}.pdf`);
+  };
 
   const checkout = async () => {
     if (cart.length === 0) return setMessage({ type:"error", text:"Cart is empty" });
@@ -61,10 +83,14 @@ export default function Sales() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Sale failed");
-      // Successfully sold
+
       setCart([]);
       setMessage({ type: "success", text: `Sale completed. Total ₹${data.totalAmount.toLocaleString()}` });
       fetchItems(); // refresh stock
+
+      // Generate PDF bill
+      generatePDF();
+
     } catch (err) {
       console.error(err);
       setMessage({ type: "error", text: err.message || "Checkout failed" });
@@ -139,7 +165,7 @@ export default function Sales() {
               disabled={loading || cart.length === 0}
               className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-60"
             >
-              {loading ? "Processing..." : "Checkout"}
+              {loading ? "Processing..." : "Checkout & Print"}
             </button>
           </div>
 

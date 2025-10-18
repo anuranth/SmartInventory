@@ -10,134 +10,175 @@ const port = 5000;
 app.use(cors());
 app.use(express.json());
 
-// Root
+// Root route
 app.get("/", (req, res) => {
-  res.send("Smart Inventory API (Prisma + SQLite) is running!");
+  res.send("✅ Smart Inventory API (Prisma + SQLite) is running!");
 });
 
-// List items
-app.get("/api/items", async (req, res) => {
+//
+// 📦 Get all products (with category + stock info)
+//
+app.get("/api/products", async (req, res) => {
   try {
-    const items = await prisma.item.findMany({ orderBy: { id: "desc" } });
-    res.json(items);
-  } catch (err) {
-    console.error("Error fetching items:", err);
-    res.status(500).json({ error: "Failed to fetch items" });
-  }
-});
-
-// Add item
-app.post("/api/items", async (req, res) => {
-  try {
-    const { name, quantity, price } = req.body;
-    if (!name || quantity == null || price == null) {
-      return res.status(400).json({ error: "All fields are required" });
-    }
-    const newItem = await prisma.item.create({
-      data: { name, quantity: Number(quantity), price: Number(price) },
+    const products = await prisma.product.findMany({
+      orderBy: { product_id: "desc" },
+      include: { category: true, stocks: true },
     });
-    res.json(newItem);
+    res.json(products);
   } catch (err) {
-    console.error("Error adding item:", err);
-    res.status(500).json({ error: "Failed to add item" });
+    console.error("Error fetching products:", err);
+    res.status(500).json({ error: "Failed to fetch products" });
   }
 });
 
-// Delete item
-app.delete("/api/items/:id", async (req, res) => {
+//
+// ➕ Add new product
+//
+app.post("/api/products", async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    const existing = await prisma.item.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: "Item not found" });
-    await prisma.item.delete({ where: { id } });
-    res.json({ message: "Item deleted" });
-  } catch (err) {
-    console.error("Error deleting item:", err);
-    res.status(500).json({ error: "Failed to delete item" });
-  }
-});
+    const { product_name, expiry_date, categoryId } = req.body;
 
-// Update item (partial update) - e.g., change quantity/price/name
-app.put("/api/items/:id", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-    const { name, quantity, price } = req.body;
-    const existing = await prisma.item.findUnique({ where: { id } });
-    if (!existing) return res.status(404).json({ error: "Item not found" });
+    if (!product_name || !expiry_date || !categoryId) {
+      return res
+        .status(400)
+        .json({ error: "product_name, expiry_date, and categoryId are required" });
+    }
 
-    const updated = await prisma.item.update({
-      where: { id },
+    const newProduct = await prisma.product.create({
       data: {
-        ...(name !== undefined ? { name } : {}),
-        ...(quantity !== undefined ? { quantity: Number(quantity) } : {}),
-        ...(price !== undefined ? { price: Number(price) } : {}),
+        product_name,
+        expiry_date: new Date(expiry_date),
+        categoryId: Number(categoryId),
       },
     });
-    res.json(updated);
+
+    res.json(newProduct);
   } catch (err) {
-    console.error("Error updating item:", err);
-    res.status(500).json({ error: "Failed to update item" });
+    console.error("Error adding product:", err);
+    res.status(500).json({ error: "Failed to add product" });
   }
 });
 
-/*
-  POST /api/sell
-  Body: { items: [{ id, qty }] }
-  Performs a transactional decrement of stock; returns sale summary or error when insufficient stock.
-*/
-app.post("/api/sell", async (req, res) => {
-  const saleItems = req.body.items;
-  if (!Array.isArray(saleItems) || saleItems.length === 0) {
-    return res.status(400).json({ error: "items array required" });
-  }
-
+//
+// 🗑️ Delete a product
+//
+app.delete("/api/products/:id", async (req, res) => {
   try {
-    // Start a transaction
-    const result = await prisma.$transaction(async (tx) => {
-      const updatedItems = [];
-
-      for (const it of saleItems) {
-        const id = Number(it.id);
-        const qtyToSell = Number(it.qty);
-        if (!id || qtyToSell <= 0) {
-          throw new Error("Invalid item id or qty");
-        }
-
-        const item = await tx.item.findUnique({ where: { id } });
-        if (!item) throw new Error(`Item ${id} not found`);
-        if (item.quantity < qtyToSell) {
-          throw new Error(`Insufficient stock for ${item.name}`);
-        }
-
-        const newQty = item.quantity - qtyToSell;
-        const updated = await tx.item.update({
-          where: { id },
-          data: { quantity: newQty },
-        });
-
-        updatedItems.push({
-          id: updated.id,
-          name: updated.name,
-          soldQty: qtyToSell,
-          remainingQty: newQty,
-          unitPrice: item.price,
-          total: qtyToSell * item.price,
-        });
-      }
-
-      return updatedItems;
+    const id = Number(req.params.id);
+    const existing = await prisma.product.findUnique({
+      where: { product_id: id },
     });
 
-    // result contains array of updated items with sale details
-    res.json({ success: true, sold: result, totalAmount: result.reduce((s, r) => s + r.total, 0) });
+    if (!existing) return res.status(404).json({ error: "Product not found" });
+
+    await prisma.product.delete({ where: { product_id: id } });
+    res.json({ message: "Product deleted" });
   } catch (err) {
-    console.error("Error processing sale:", err);
-    // If error message from thrown Error use it, else generic
-    res.status(400).json({ error: err.message || "Failed to process sale" });
+    console.error("Error deleting product:", err);
+    res.status(500).json({ error: "Failed to delete product" });
   }
 });
 
-// Start
+//
+// ✏️ Update product details
+//
+app.put("/api/products/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { product_name, expiry_date, categoryId } = req.body;
+
+    const existing = await prisma.product.findUnique({
+      where: { product_id: id },
+    });
+    if (!existing) return res.status(404).json({ error: "Product not found" });
+
+    const updated = await prisma.product.update({
+      where: { product_id: id },
+      data: {
+        ...(product_name && { product_name }),
+        ...(expiry_date && { expiry_date: new Date(expiry_date) }),
+        ...(categoryId && { categoryId: Number(categoryId) }),
+      },
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error("Error updating product:", err);
+    res.status(500).json({ error: "Failed to update product" });
+  }
+});
+
+//
+// 🧾 Add stock entry (for a product)
+//
+app.post("/api/stock", async (req, res) => {
+  try {
+    const { productId, quantity } = req.body;
+
+    if (!productId || !quantity || quantity <= 0) {
+      return res.status(400).json({ error: "Valid productId and quantity required" });
+    }
+
+    const product = await prisma.product.findUnique({
+      where: { product_id: Number(productId) },
+    });
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    const newStock = await prisma.stock.create({
+      data: {
+        productId: Number(productId),
+        quantity: Number(quantity),
+        date: new Date(),
+      },
+    });
+
+    res.json({
+      message: `✅ Added ${quantity} units to ${product.product_name}`,
+      stock: newStock,
+    });
+  } catch (err) {
+    console.error("Error adding stock:", err);
+    res.status(500).json({ error: "Failed to add stock" });
+  }
+});
+
+//
+// 🏷️ Get all categories
+//
+app.get("/api/categories", async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: { category_id: "asc" },
+    });
+    res.json(categories);
+  } catch (err) {
+    console.error("Error fetching categories:", err);
+    res.status(500).json({ error: "Failed to fetch categories" });
+  }
+});
+
+//
+// ➕ Add a category
+//
+app.post("/api/categories", async (req, res) => {
+  try {
+    const { category_name } = req.body;
+    if (!category_name) return res.status(400).json({ error: "category_name required" });
+
+    const newCat = await prisma.category.create({
+      data: { category_name },
+    });
+
+    res.json(newCat);
+  } catch (err) {
+    console.error("Error adding category:", err);
+    res.status(500).json({ error: "Failed to add category" });
+  }
+});
+
+//
+// 🚀 Start the server
+//
 app.listen(port, () => {
   console.log(`✅ Server running at http://localhost:${port}`);
 });
