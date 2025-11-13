@@ -1,16 +1,22 @@
 import { useState } from "react";
-import { User, Box, ShoppingCart, LogOut, Menu, X } from "lucide-react";
+import { User, Box, ShoppingCart, LogOut, Menu, X, Tag } from "lucide-react";
 import { Link } from "react-router-dom";
 
-export default function Sidebar() {
+export default function Sidebar({ role }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
+  function logout(e) {
+    e.preventDefault();
+    localStorage.removeItem("token");
+    window.location.reload();
+  }
   return (
     <>
       {/* Sidebar */}
       <aside
         className={`fixed md:relative top-0 left-0 h-full md:h-auto w-64 bg-blue-700 text-white flex flex-col justify-between p-6 shadow-lg transform transition-transform duration-300 z-50
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}
+        ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        }`}
       >
         <div>
           <div className="flex items-center mb-8">
@@ -38,13 +44,25 @@ export default function Sidebar() {
             >
               <ShoppingCart size={18} /> Sales
             </Link>
+            {role == "admin" && (
+              <Link
+                to="/categories"
+                className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition"
+              >
+                <Tag size={18} /> Categories
+              </Link>
+            )}
+
             <button className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition">
               <User size={18} /> Profile
             </button>
           </nav>
         </div>
 
-        <button className="flex items-center gap-2 p-2 rounded hover:bg-blue-600 transition mt-8">
+        <button
+          onClick={logout}
+          className="flex items-center gap-2 p-2 rounded hover:bg-blue-600 transition mt-8"
+        >
           <LogOut size={18} /> Logout
         </button>
       </aside>

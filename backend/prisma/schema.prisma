@@ -1,3 +1,10 @@
+model User {
+  user_id  Int    @id @default(autoincrement())
+  username String @unique
+  password String
+  role     String // "admin" or "staff"
+}
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +20,32 @@ model Category {
   products      Product[]
 }
 
+// TODO: add price to Product model
 model Product {
-  product_id    Int       @id @default(autoincrement())
-  product_name  String
-  expiry_date   DateTime
-  category      Category  @relation(fields: [categoryId], references: [category_id])
-  categoryId    Int
-  stocks        Stock[]
-  createdAt     DateTime  @default(now())
+  product_id   Int      @id @default(autoincrement())
+  product_name String
+  expiry_date  DateTime
+  category     Category @relation(fields: [categoryId], references: [category_id])
+  categoryId   Int
+  stocks       Stock[]
+  createdAt    DateTime @default(now())
+  Sales        Sales[]
+  price        Float    @default(0)
 }
 
 model Stock {
-  stock_id    Int      @id @default(autoincrement())
-  product     Product  @relation(fields: [productId], references: [product_id])
-  productId   Int
-  date        DateTime @default(now())
-  quantity    Int
+  stock_id  Int      @id @default(autoincrement())
+  product   Product  @relation(fields: [productId], references: [product_id])
+  productId Int
+  date      DateTime @default(now())
+  quantity  Int
+}
+
+model Sales {
+  sale_id   Int      @id @default(autoincrement())
+  product   Product  @relation(fields: [productId], references: [product_id])
+  productId Int
+  date      DateTime
+  quantity  Int
+  price     Float @default(0)
 }

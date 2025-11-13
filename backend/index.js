@@ -1,7 +1,9 @@
-// index.js
+// const jwt = require("jsonwebtoken");
 import express from "express";
+import bcrypt from "bcrypt";
 import cors from "cors";
 import { PrismaClient } from "@prisma/client";
+import jwt from "jsonwebtoken";
 
 const app = express();
 const prisma = new PrismaClient();
@@ -10,14 +12,13 @@ const port = 5000;
 app.use(cors());
 app.use(express.json());
 
+const JWT_Token = process.env.JWT_SECRET_TOKEN;
+
 // Root route
 app.get("/", (req, res) => {
   res.send("✅ Smart Inventory API (Prisma + SQLite) is running!");
 });
 
-//
-// 📦 Get all products (with category + stock info)
-//
 app.get("/api/products", async (req, res) => {
   try {
     const products = await prisma.product.findMany({
@@ -36,12 +37,12 @@ app.get("/api/products", async (req, res) => {
 //
 app.post("/api/products", async (req, res) => {
   try {
-    const { product_name, expiry_date, categoryId } = req.body;
+    const { product_name, expiry_date, categoryId, price } = req.body;
 
-    if (!product_name || !expiry_date || !categoryId) {
-      return res
-        .status(400)
-        .json({ error: "product_name, expiry_date, and categoryId are required" });
+    if (!product_name || !expiry_date || !categoryId || !price) {
+      return res.status(400).json({
+        error: "product_name, expiry_date, and categoryId are required",
+      });
     }
 
     const newProduct = await prisma.product.create({
@@ -49,6 +50,7 @@ app.post("/api/products", async (req, res) => {
         product_name,
         expiry_date: new Date(expiry_date),
         categoryId: Number(categoryId),
+        price: Number(price),
       },
     });
 
@@ -56,6 +58,36 @@ app.post("/api/products", async (req, res) => {
   } catch (err) {
     console.error("Error adding product:", err);
     res.status(500).json({ error: "Failed to add product" });
+  }
+});
+
+app.post("/api/sales", async (req, res) => {
+  console.log("sales endpoint");
+  try {
+    const { product_name, quantity, date, price } = req.body;
+    console.log(product_name, date, quantity);
+
+    if (!product_name || !date || !quantity || !price) {
+      return res.status(400).json({
+        error: "product_name, expiry_date, and categoryId are required",
+      });
+    }
+
+    const newSale = await prisma.sales.create({
+      data: {
+        date: new Date(date),
+        productId: product_name,
+        quantity: Number(quantity),
+        price: Number(price),
+      },
+    });
+
+    res.status(200).json(newSale);
+
+  } catch (err) {
+    console.error("Error adding product:", err);
+    console.log("Error")
+    res.status(500).json({ error: "Failed to add Sales" });
   }
 });
 
@@ -78,6 +110,9 @@ app.delete("/api/products/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to delete product" });
   }
 });
+
+import categoryRoutes from "./routes/category.js";
+app.use("/api/categories", categoryRoutes);
 
 //
 // ✏️ Update product details
@@ -116,7 +151,9 @@ app.post("/api/stock", async (req, res) => {
     const { productId, quantity } = req.body;
 
     if (!productId || !quantity || quantity <= 0) {
-      return res.status(400).json({ error: "Valid productId and quantity required" });
+      return res
+        .status(400)
+        .json({ error: "Valid productId and quantity required" });
     }
 
     const product = await prisma.product.findUnique({
@@ -163,7 +200,8 @@ app.get("/api/categories", async (req, res) => {
 app.post("/api/categories", async (req, res) => {
   try {
     const { category_name } = req.body;
-    if (!category_name) return res.status(400).json({ error: "category_name required" });
+    if (!category_name)
+      return res.status(400).json({ error: "category_name required" });
 
     const newCat = await prisma.category.create({
       data: { category_name },
@@ -176,9 +214,47 @@ app.post("/api/categories", async (req, res) => {
   }
 });
 
-//
-// 🚀 Start the server
-//
+// Login route
+app.post("/api/login", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password)
+    return res.status(400).json({ error: "username & password required" });
+
+  const user = await prisma.user.findUnique({ where: { username } });
+
+  if (!user)
+    return res.status(401).json({ error: "Invalid username or password" });
+
+  // Compare hashed password
+  const passwordMatch = await bcrypt.compare(password, user.password);
+  if (!passwordMatch)
+    return res.status(401).json({ error: "Invalid username or password" });
+
+  const token = jwt.sign({ username, role: user.role }, JWT_Token, {
+    expiresIn: "1h",
+  });
+  console.log(token);
+
+  return res.json({
+    token,
+    username,
+    role: user.role,
+    user_id: user.user_id,
+    username: user.username,
+  });
+});
+
+app.get("/api/verify", (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.json({ valid: false });
+
+  const token = authHeader.split(" ")[1];
+  jwt.verify(token, JWT_Token, (err, decoded) => {
+    if (err) return res.json({ valid: false });
+    res.json({ valid: true, user: decoded });
+  });
+});
+
 app.listen(port, () => {
   console.log(`✅ Server running at http://localhost:${port}`);
 });

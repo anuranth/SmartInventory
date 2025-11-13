@@ -1,18 +1,16 @@
-// addCategory.js
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const newCategory = await prisma.category.create({
-    data: {
-      category_name: "Groceries", // 👈 change name as you like
-    },
+  const password = await bcrypt.hash("staff123", 10); // staff password
+  const staff = await prisma.user.create({
+    data: { username: "staff", password, role: "staff" },
   });
-
-  console.log("✅ Category added:", newCategory);
+  console.log("✅ Staff user added:", staff);
 }
 
 main()
-  .catch((err) => console.error(err))
-  .finally(async () => await prisma.$disconnect());
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());
