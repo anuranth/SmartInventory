@@ -1,21 +1,17 @@
 import { useState } from "react";
-import { redirect } from "react-router-dom";
 
-const LOGIN_API = "http://localhost:5000/api/login";
-export default function Login({ onLogin, user }) {
+const LOGIN_API = "http://localhost:5000/api/signup";
+export default function SignUp({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
-  if (user) {
-    redirect("/");
-  }
-  const handleLogin = async (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
 
     if (!username || !password) return alert("Enter username & password");
 
     try {
-      const res = await fetch("http://localhost:5000/api/login", {
+      const res = await fetch(LOGIN_API, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -36,8 +32,8 @@ export default function Login({ onLogin, user }) {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white p-8 rounded-lg shadow-md w-96">
-        <h2 className="text-2xl font-semibold mb-6 text-center">Login</h2>
-        <form onSubmit={handleLogin}>
+        <h2 className="text-2xl font-semibold mb-6 text-center">Sign up</h2>
+        <form onSubmit={handleSignup}>
           <input
             className="w-full border px-3 py-2 rounded mb-4"
             placeholder="Username"

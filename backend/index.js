@@ -32,6 +32,27 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
+app.get("/api/sales", async (req, res) => {
+  try {
+    const sales = await prisma.sales.findMany({
+      orderBy: { sale_id: "desc" },
+      include: {
+        product: {
+          include: {
+            category: true,
+            stocks: true,
+          },
+        },
+      },
+    });
+
+    res.json(sales);
+  } catch (err) {
+    console.error("Error fetching sales:", err);
+    res.status(500).json({ error: "Failed to fetch sales" });
+  }
+});
+
 //
 // ➕ Add new product
 //
@@ -62,38 +83,65 @@ app.post("/api/products", async (req, res) => {
 });
 
 app.post("/api/sales", async (req, res) => {
-  console.log("sales endpoint");
   try {
-    const { product_name, quantity, date, price } = req.body;
-    console.log(product_name, date, quantity);
+    const { productId, quantity, date, price } = req.body;
 
-    if (!product_name || !date || !quantity || !price) {
+    if (!productId || !quantity || !date || !price) {
       return res.status(400).json({
-        error: "product_name, expiry_date, and categoryId are required",
+        error: "productId, quantity, date, and price are required",
       });
     }
 
+    const product = await prisma.product.findUnique({
+      where: { product_id: Number(productId) },
+      include: { stocks: true },
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: "Product not found" });
+    }
+
+    // Calculate total stock
+    const totalStock = product.stocks.reduce(
+      (sum, entry) => sum + entry.quantity,
+      0
+    );
+
+    if (Number(quantity) > totalStock) {
+      return res.status(400).json({
+        error: `Not enough stock. Available: ${totalStock}`,
+      });
+    }
+
+    // Record the sale
     const newSale = await prisma.sales.create({
       data: {
-        date: new Date(date),
-        productId: product_name,
+        productId: Number(productId),
         quantity: Number(quantity),
+        date: new Date(date),
         price: Number(price),
       },
     });
 
-    res.status(200).json(newSale);
+    // Deduct stock (negative stock entry)
+    await prisma.stock.create({
+      data: {
+        productId: Number(productId),
+        quantity: -Number(quantity),
+        date: new Date(),
+      },
+    });
 
+    res.json({
+      message: "Sale recorded and stock updated",
+      sale: newSale,
+    });
   } catch (err) {
-    console.error("Error adding product:", err);
-    console.log("Error")
-    res.status(500).json({ error: "Failed to add Sales" });
+    console.error("Error processing sale:", err);
+    res.status(500).json({ error: "Failed to record sale" });
   }
 });
 
-//
-// 🗑️ Delete a product
-//
 app.delete("/api/products/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -242,6 +290,91 @@ app.post("/api/login", async (req, res) => {
     user_id: user.user_id,
     username: user.username,
   });
+});
+
+// Login route
+app.post("/api/login", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password)
+    return res.status(400).json({ error: "username & password required" });
+
+  const user = await prisma.user.findUnique({ where: { username } });
+
+  if (!user)
+    return res.status(401).json({ error: "Invalid username or password" });
+
+  // Compare hashed password
+  const passwordMatch = await bcrypt.compare(password, user.password);
+  if (!passwordMatch)
+    return res.status(401).json({ error: "Invalid username or password" });
+
+  const token = jwt.sign({ username, role: user.role }, JWT_Token, {
+    expiresIn: "1h",
+  });
+  console.log(token);
+
+  return res.json({
+    token,
+    username,
+    role: user.role,
+    user_id: user.user_id,
+    username: user.username,
+  });
+});
+
+// Signup route
+app.post("/api/signup", async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        error: "username & password required",
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        error: "Username already taken",
+      });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        password: hashedPassword,
+        role: role || "user", // default role
+      },
+    });
+
+    const token = jwt.sign(
+      { username: newUser.username, role: newUser.role },
+      JWT_Token,
+      { expiresIn: "1h" }
+    );
+
+    return res.json({
+      message: "Signup successful",
+      token,
+      user_id: newUser.user_id,
+      username: newUser.username,
+      role: newUser.role,
+    });
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({
+      error: "Failed to signup",
+    });
+  }
 });
 
 app.get("/api/verify", (req, res) => {

@@ -9,6 +9,7 @@ const CATEGORY_API = "http://localhost:5000/api/categories";
 
 export default function Dashboard() {
   const [products, setProducts] = useState([]);
+  const [sales, setSales] = useState([]);
   const [categories, setCategories] = useState([]);
   const [productForm, setProductForm] = useState({
     product_name: "",
@@ -19,8 +20,7 @@ export default function Dashboard() {
   });
 
   const [salesForm, setSalesForm] = useState({
-    product_name: "",
-    product_id: "",
+    productId: "",
     date: new Date().toISOString().split("T")[0],
     quantity: "",
     price: "",
@@ -29,12 +29,23 @@ export default function Dashboard() {
   // Load products and categories
   const loadProducts = async () => {
     try {
-      const res = await fetch(PRODUCTS_API);
+      let res = await fetch(PRODUCTS_API);
       if (!res.ok) return setProducts([]);
       const data = await res.json();
       setProducts(data);
     } catch (err) {
       console.error("Error loading products:", err);
+    }
+  };
+
+  const loadSales = async () => {
+    try {
+      let salesRes = await fetch(SALES_API);
+      if (!salesRes.ok) return setSales([]);
+      const data = await salesRes.json();
+      setSales(data);
+    } catch (e) {
+      console.error("Error loading: ", e);
     }
   };
 
@@ -51,13 +62,14 @@ export default function Dashboard() {
   useEffect(() => {
     loadProducts();
     loadCategories();
+    loadSales();
   }, []);
 
   // Add new product
 
   const addProduct = async () => {
     const { product_name, expiry_date, categoryId, price } = productForm;
-    console.log(product_name, expiry_date, categoryId,price)
+    console.log(product_name, expiry_date, categoryId, price);
     if (!product_name || !expiry_date || !categoryId) {
       return alert("Please fill in all fields");
     }
@@ -88,9 +100,9 @@ export default function Dashboard() {
   };
 
   const addSale = async () => {
-    const { product_name, date, quantity } = salesForm;
-    console.log(product_name,date,quantity)
-    if (!product_name || !date || !quantity) {
+    const { productId, date, quantity, price } = salesForm;
+
+    if (!productId || !date || !quantity || !price) {
       return alert("Please fill in all fields");
     }
 
@@ -98,23 +110,29 @@ export default function Dashboard() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        product_name,
+        productId: Number(productId),
         date,
         quantity: Number(quantity),
+        price: Number(price),
       }),
     });
 
     if (res.ok) {
-      setProductForm({
-        product_name: "",
-        expiry_date: "",
-        categoryId: "",
+      // reset sales form
+      setSalesForm({
+        productId: "",
+        date: "",
         quantity: "",
         price: "",
       });
       loadProducts();
+      loadSales();
+
+      alert("Successfully added sale");
+
+      // loadSales(); // or refresh
     } else {
-      alert("Failed to add product");
+      alert("Failed to add sale");
     }
   };
 
@@ -150,7 +168,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Add Sales Section */}
       <div className="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-200">
         <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-3">
           ➕ Add New Product
@@ -208,52 +225,61 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Add Product Section */}
       <div className="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-200">
         <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-3">
           ➕ Add New Sale
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+          {/* PRODUCT DROPDOWN */}
           <select
             className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
+            value={salesForm.productId}
             onChange={(e) =>
-              setSalesForm({ ...salesForm, product_name: e.target.value })
+              setSalesForm({ ...salesForm, productId: e.target.value })
             }
           >
             <option value="">Select Product</option>
-            {products.map((c) => (
-              <option key={c.categoryId} value={c.categoryId}>
-                {c.product_name}
+            {products.map((p) => (
+              <option key={p.product_id} value={p.product_id}>
+                {p.product_name}
               </option>
             ))}
           </select>
+
+          {/* DATE */}
           <input
             className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            type="date-time"
-            value={salesForm.date} // default = today
+            type="datetime-local"
+            value={salesForm.date}
             onChange={(e) =>
               setSalesForm({ ...salesForm, date: e.target.value })
             }
           />
+
+          {/* QUANTITY */}
           <input
             className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
             type="number"
+            placeholder="Quantity"
             value={salesForm.quantity}
             onChange={(e) =>
               setSalesForm({ ...salesForm, quantity: e.target.value })
             }
           />
 
+          {/* PRICE */}
           <input
             className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
             type="number"
+            placeholder="Price"
             value={salesForm.price}
             onChange={(e) =>
               setSalesForm({ ...salesForm, price: e.target.value })
             }
           />
 
+          {/* BUTTON */}
           <button
             onClick={addSale}
             className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
@@ -339,6 +365,75 @@ export default function Dashboard() {
                           <Trash2 size={16} />
                         </button>
                       </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-4">
+          <h2 className="text-lg font-semibold text-white">
+            📦 Sales Overview
+          </h2>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-gray-700">
+            <thead className="bg-gray-100 border-b text-gray-600 uppercase text-xs tracking-wider">
+              <tr>
+                <th className="p-3 text-left">Product</th>
+                <th className="p-3 text-left">Category</th>
+                <th className="p-3 text-left">Quantity</th>
+                <th className="p-3 text-left">Price</th>
+                <th className="p-3 text-left">Stock Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sales.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan="5"
+                    className="text-center text-gray-500 py-6 italic bg-gray-50"
+                  >
+                    No products found
+                  </td>
+                </tr>
+              ) : (
+                sales.map((p, i) => (
+                  <tr
+                    key={p.sale_id}
+                    className={`border-b hover:bg-blue-50 transition ${
+                      i % 2 === 0 ? "bg-white" : "bg-gray-50"
+                    }`}
+                  >
+                    <td className="p-3 font-medium text-gray-800">
+                      {p.product.product_name}
+                    </td>
+
+                    <td className="p-3">
+                      {p.product.category?.category_name || "-"}
+                    </td>
+
+
+                    {/* NEW: Quantity */}
+                    <td className="p-3 font-semibold text-gray-800">
+                      {p.quantity}
+                    </td>
+
+                    {/* NEW: Price */}
+                    <td className="p-3 font-semibold text-gray-800">
+                      ₹{p.price}
+                    </td>
+
+                    <td className="p-3 font-semibold text-blue-700">
+                      {p.product.stocks?.reduce(
+                        (sum, s) => sum + s.quantity,
+                        0
+                      ) || 0}
                     </td>
                   </tr>
                 ))
