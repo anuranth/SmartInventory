@@ -1,446 +1,379 @@
-// src/components/Dashboard.jsx
 import { useState, useEffect } from "react";
-import { Package, PlusCircle, Trash2, ShoppingCart } from "lucide-react";
+import { 
+  Package, 
+  Plus, 
+  Trash2, 
+  AlertCircle, 
+  RefreshCw, 
+  Archive, 
+  Search, 
+  TrendingUp,
+  DollarSign
+} from "lucide-react";
+import StatCard from "./StatCard.jsx";
 
-const PRODUCTS_API = "http://localhost:5000/api/products";
-const SALES_API = "http://localhost:5000/api/sales";
-const STOCK_API = "http://localhost:5000/api/stock";
-const CATEGORY_API = "http://localhost:5000/api/categories";
+const API_BASE = "http://localhost:5000/api";
 
 export default function Dashboard() {
   const [products, setProducts] = useState([]);
-  const [sales, setSales] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [productForm, setProductForm] = useState({
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  // State for row-specific inputs (managed by product ID)
+  const [stockInputs, setStockInputs] = useState({});
+
+  // Stats
+  const [stats, setStats] = useState({
+    totalProducts: 0,
+    lowStock: 0,
+    totalValue: 0,
+  });
+
+  const [form, setForm] = useState({
     product_name: "",
     expiry_date: "",
     categoryId: "",
-    quantity: "",
     price: "",
   });
 
-  const [salesForm, setSalesForm] = useState({
-    productId: "",
-    date: new Date().toISOString().split("T")[0],
-    quantity: "",
-    price: "",
-  });
-
-  // Load products and categories
-  const loadProducts = async () => {
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      let res = await fetch(PRODUCTS_API);
-      if (!res.ok) return setProducts([]);
-      const data = await res.json();
-      setProducts(data);
+      const [prodRes, catRes] = await Promise.all([
+        fetch(`${API_BASE}/products`),
+        fetch(`${API_BASE}/categories`),
+      ]);
+
+      const prods = await prodRes.json();
+      const cats = await catRes.json();
+
+      setProducts(prods);
+      setCategories(cats);
+      
+      // --- BUG FIX & CALCULATION ---
+      let lowStockCount = 0;
+      let inventoryValue = 0;
+
+      prods.forEach(p => {
+        // Calculate total stock for this product
+        const currentStock = p.stocks?.reduce((sum, s) => sum + s.quantity, 0) || 0;
+        
+        // Count low stock
+        if (currentStock < 10) lowStockCount++;
+
+        // Fix: Value = Price * Quantity (handled safe parsing)
+        inventoryValue += (Number(p.price) || 0) * currentStock;
+      });
+
+      setStats({
+        totalProducts: prods.length,
+        lowStock: lowStockCount,
+        totalValue: inventoryValue
+      });
       
     } catch (err) {
-      console.error("Error loading products:", err);
-    }
-  };
-
-  const loadSales = async () => {
-    try {
-      let salesRes = await fetch(SALES_API);
-      if (!salesRes.ok) return setSales([]);
-      const data = await salesRes.json();
-      setSales(data);
-    } catch (e) {
-      console.error("Error loading: ", e);
-    }
-  };
-
-  const loadCategories = async () => {
-    try {
-      const res = await fetch(CATEGORY_API);
-      const data = await res.json();
-      setCategories(data);
-    } catch (err) {
-      console.error("Error loading categories:", err);
+      console.error("Error fetching data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadProducts();
-    loadCategories();
-    loadSales();
+    fetchData();
   }, []);
 
-  // Add new product
-
-  const addProduct = async () => {
-    const { product_name, expiry_date, categoryId, price } = productForm;
-    console.log(product_name, expiry_date, categoryId, price);
-    if (!product_name || !expiry_date || !categoryId) {
-      return alert("Please fill in all fields");
+  const handleAddProduct = async (e) => {
+    e.preventDefault();
+    if (!form.product_name || !form.categoryId || !form.price) {
+      return alert("Please fill in required fields");
     }
 
-    const res = await fetch(PRODUCTS_API, {
+    try {
+      const res = await fetch(`${API_BASE}/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          categoryId: Number(form.categoryId),
+          price: Number(form.price),
+          expiry_date: form.expiry_date ? form.expiry_date : null
+        }),
+      });
+
+      if (res.ok) {
+        setForm({ product_name: "", expiry_date: "", categoryId: "", price: "" });
+        fetchData();
+        // Ideally use a toast notification here instead of alert
+        alert("Product Added Successfully!");
+      } else {
+        alert("Failed to add product");
+      }
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    await fetch(`${API_BASE}/products/${id}`, { method: "DELETE" });
+    fetchData();
+  };
+
+  const handleStockInputChange = (id, value) => {
+    setStockInputs(prev => ({ ...prev, [id]: value }));
+  };
+
+  const handleAddStock = async (productId) => {
+    const qtyStr = stockInputs[productId];
+    const qty = Number(qtyStr);
+
+    if (!qty || qty <= 0) return alert("Invalid quantity");
+
+    const res = await fetch(`${API_BASE}/stock`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        product_name,
-        expiry_date,
-        categoryId: Number(categoryId),
-        price: Number(price),
-      }),
+      body: JSON.stringify({ productId, quantity: qty }),
     });
 
     if (res.ok) {
-      setProductForm({
-        product_name: "",
-        expiry_date: "",
-        categoryId: "",
-        quantity: "",
-        price: "",
-      });
-      loadProducts();
-    } else {
-      alert("Failed to add product");
+      fetchData();
+      // Clear specific input
+      setStockInputs(prev => ({ ...prev, [productId]: "" }));
     }
   };
 
-  const addSale = async () => {
-    const { productId, date, quantity, price } = salesForm;
-
-    if (!productId || !date || !quantity || !price) {
-      return alert("Please fill in all fields");
-    }
-
-    const res = await fetch(SALES_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        productId: Number(productId),
-        date,
-        quantity: Number(quantity),
-        price: Number(price),
-      }),
-    });
-
-    if (res.ok) {
-      // reset sales form
-      setSalesForm({
-        productId: "",
-        date: "",
-        quantity: "",
-        price: "",
-      });
-      loadProducts();
-      loadSales();
-
-      alert("Successfully added sale");
-
-      // loadSales(); // or refresh
-    } else {
-      alert("Failed to add sale");
-    }
-  };
-
-  // Add stock
-  const addStock = async (productId, qty) => {
-    if (!qty || qty <= 0) return alert("Enter valid quantity");
-    const res = await fetch(STOCK_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, quantity: Number(qty) }),
-    });
-    if (res.ok) loadProducts();
-  };
-
-  // Delete product
-  const deleteProduct = async (id) => {
-    await fetch(`${PRODUCTS_API}/${id}`, { method: "DELETE" });
-    loadProducts();
-  };
+  // Filter products for search
+  const filteredProducts = products.filter(p => 
+    p.product_name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
-          <Package className="text-blue-600" /> Smart Inventory Dashboard
-        </h1>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-blue-100 text-blue-700 px-4 py-2 rounded-full font-medium shadow-sm">
-            <ShoppingCart size={18} />
-            {products.length} Products
+    <div className="space-y-8 pb-10">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-200 pb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 tracking-tight">Dashboard</h1>
+          <p className="text-gray-500 mt-1">Overview of your inventory performance.</p>
+        </div>
+        <div className="flex gap-3">
+          <button 
+            onClick={fetchData} 
+            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm font-medium"
+          >
+            <RefreshCw size={18} className={loading ? "animate-spin text-blue-600" : "text-gray-500"} /> 
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard 
+          title="Total Products" 
+          value={stats.totalProducts} 
+          icon={Package} 
+          color="blue" 
+          trend="up"
+        />
+        <StatCard 
+          title="Low Stock Alerts" 
+          value={stats.lowStock} 
+          icon={AlertCircle} 
+          color="red" 
+        />
+        <StatCard 
+          title="Inventory Value" 
+          value={`₹${stats.totalValue.toLocaleString('en-IN')}`} 
+          icon={DollarSign} 
+          color="green" 
+        />
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        
+        {/* Left Column: Product List */}
+        <div className="xl:col-span-2 space-y-6">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            
+            {/* Table Header / Search */}
+            <div className="p-5 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gray-50/50">
+              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <Archive className="text-blue-600" size={20} /> Current Inventory
+              </h2>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Search products..." 
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-full sm:w-64 transition-all"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-600 font-semibold border-b border-gray-200">
+                  <tr>
+                    <th className="p-4 w-[25%]">Product</th>
+                    <th className="p-4">Price</th>
+                    <th className="p-4">Stock</th>
+                    <th className="p-4">Value</th>
+                    <th className="p-4">Quick Add</th>
+                    <th className="p-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center p-12 text-gray-500">
+                        <div className="flex flex-col items-center gap-2">
+                          <Package size={40} className="text-gray-300" />
+                          <p>No products found matching your search.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProducts.map((p) => {
+                      const totalStock = p.stocks?.reduce((sum, s) => sum + s.quantity, 0) || 0;
+                      const stockValue = (p.price || 0) * totalStock;
+                      const isLowStock = totalStock < 10;
+
+                      return (
+                        <tr key={p.product_id} className="hover:bg-blue-50/30 transition-colors group">
+                          <td className="p-4">
+                            <div className="font-medium text-gray-900">{p.product_name}</div>
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {p.category?.category_name || "Uncategorized"}
+                            </div>
+                          </td>
+                          <td className="p-4 text-gray-700 font-medium">₹{p.price}</td>
+                          <td className="p-4">
+                            <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                              isLowStock 
+                                ? "bg-red-50 text-red-700 border-red-100" 
+                                : "bg-green-50 text-green-700 border-green-100"
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${isLowStock ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                              {totalStock}
+                            </div>
+                          </td>
+                          <td className="p-4 text-gray-600">
+                             ₹{stockValue.toLocaleString()}
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={stockInputs[p.product_id] || ""}
+                                onChange={(e) => handleStockInputChange(p.product_id, e.target.value)}
+                                className="w-16 border border-gray-300 rounded px-2 py-1 text-xs focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition"
+                                placeholder="Qty"
+                              />
+                              <button
+                                onClick={() => handleAddStock(p.product_id)}
+                                className="bg-blue-600 text-white p-1 rounded hover:bg-blue-700 transition shadow-sm"
+                                title="Add Stock"
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => handleDelete(p.product_id)}
+                              className="text-gray-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                              title="Delete Product"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-200">
-        <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-3">
-          ➕ Add New Product
-        </h2>
+        {/* Right Column: Add Product Form */}
+        <div className="xl:col-span-1">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 sticky top-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2 pb-4 border-b border-gray-100">
+              <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
+                <Plus size={20} /> 
+              </div>
+              Add New Product
+            </h2>
+            
+            <form onSubmit={handleAddProduct} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Product Name</label>
+                <input
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-gray-50 focus:bg-white"
+                  placeholder="e.g. Wireless Mouse"
+                  value={form.product_name}
+                  onChange={(e) => setForm({ ...form, product_name: e.target.value })}
+                  required
+                />
+              </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <input
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            placeholder="Product name"
-            value={productForm.product_name}
-            onChange={(e) =>
-              setProductForm({
-                ...productForm,
-                product_name: e.target.value,
-                e,
-              })
-            }
-          />
-          <select
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            value={productForm.categoryId}
-            onChange={(e) =>
-              setProductForm({ ...productForm, categoryId: e.target.value })
-            }
-          >
-            <option value="">Select Category</option>
-            {categories.map((c) => (
-              <option key={c.category_id} value={c.category_id}>
-                {c.category_name}
-              </option>
-            ))}
-          </select>
-          <input
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            type="date"
-            value={productForm.expiry_date}
-            onChange={(e) =>
-              setProductForm({ ...productForm, expiry_date: e.target.value })
-            }
-          />
-          <input
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            type="number"
-            value={productForm.price}
-            onChange={(e) =>
-              setProductForm({ ...productForm, price: e.target.value })
-            }
-          />
-          <button
-            onClick={addProduct}
-            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            <PlusCircle size={18} /> Add
-          </button>
-        </div>
-      </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Category</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
+                  value={form.categoryId}
+                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+                  required
+                >
+                  <option value="">Select Category</option>
+                  {categories.map((c) => (
+                    <option key={c.category_id} value={c.category_id}>{c.category_name}</option>
+                  ))}
+                </select>
+              </div>
 
-      <div className="bg-white rounded-2xl shadow-lg p-6 mb-10 border border-gray-200">
-        <h2 className="text-xl font-semibold mb-4 text-gray-800 border-b pb-3">
-          ➕ Add New Sale
-        </h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Price (₹)</label>
+                    <div className="relative">
+                        <input
+                        className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                        type="number"
+                        placeholder="0.00"
+                        value={form.price}
+                        onChange={(e) => setForm({ ...form, price: e.target.value })}
+                        required
+                        />
+                    </div>
+                </div>
+                <div>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Expiry</label>
+                    <input
+                        className="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                        type="date"
+                        value={form.expiry_date}
+                        onChange={(e) => setForm({ ...form, expiry_date: e.target.value })}
+                    />
+                </div>
+              </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-          {/* PRODUCT DROPDOWN */}
-          <select
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            value={salesForm.productId}
-            onChange={(e) =>
-              setSalesForm({ ...salesForm, productId: e.target.value })
-            }
-          >
-            <option value="">Select Product</option>
-            {products.map((p) => (
-              <option key={p.product_id} value={p.product_id}>
-                {p.product_name}
-              </option>
-            ))}
-          </select>
-
-          {/* DATE */}
-          <input
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            type="datetime-local"
-            value={salesForm.date}
-            onChange={(e) =>
-              setSalesForm({ ...salesForm, date: e.target.value })
-            }
-          />
-
-          {/* QUANTITY */}
-          <input
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            type="number"
-            placeholder="Quantity"
-            value={salesForm.quantity}
-            onChange={(e) =>
-              setSalesForm({ ...salesForm, quantity: e.target.value })
-            }
-          />
-
-          {/* PRICE */}
-          <input
-            className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
-            type="number"
-            placeholder="Price"
-            value={salesForm.price}
-            onChange={(e) =>
-              setSalesForm({ ...salesForm, price: e.target.value })
-            }
-          />
-
-          {/* BUTTON */}
-          <button
-            onClick={addSale}
-            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-          >
-            <PlusCircle size={18} /> Add
-          </button>
-        </div>
-      </div>
-
-      {/* Products Table */}
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-4">
-          <h2 className="text-lg font-semibold text-white">
-            📦 Inventory Overview
-          </h2>
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white font-semibold py-3 rounded-lg hover:bg-blue-700 active:transform active:scale-95 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2 mt-4"
+              >
+                <Plus size={18} /> Add to Inventory
+              </button>
+            </form>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-gray-700">
-            <thead className="bg-gray-100 border-b text-gray-600 uppercase text-xs tracking-wider">
-              <tr>
-                <th className="p-3 text-left">Product</th>
-                <th className="p-3 text-left">Category</th>
-                <th className="p-3 text-left">Expiry Date</th>
-                <th className="p-3 text-left">Stock Count</th>
-                <th className="p-3 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {products.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan="5"
-                    className="text-center text-gray-500 py-6 italic bg-gray-50"
-                  >
-                    No products found
-                  </td>
-                </tr>
-              ) : (
-                products.map((p, i) => (
-                  <tr
-                    key={p.product_id}
-                    className={`border-b hover:bg-blue-50 transition ${
-                      i % 2 === 0 ? "bg-white" : "bg-gray-50"
-                    }`}
-                  >
-                    <td className="p-3 font-medium text-gray-800">
-                      {p.product_name}
-                    </td>
-                    <td className="p-3">{p.category?.category_name || "-"}</td>
-                    <td className="p-3">
-                      {p.expiry_date ? p.expiry_date.split("T")[0] : "-"}
-                    </td>
-                    <td className="p-3 font-semibold text-blue-700">
-                      {p.stocks?.reduce((sum, s) => sum + s.quantity, 0) || 0}
-                    </td>
-                    <td className="p-3 text-center">
-                      <div className="flex justify-center gap-2 items-center">
-                        <div className="flex items-center gap-1">
-                          <input
-                            id={`add-${p.product_id}`}
-                            type="number"
-                            placeholder="Qty"
-                            className="border rounded-md px-2 py-1 w-16 text-center focus:ring-2 focus:ring-blue-400"
-                          />
-                          <button
-                            onClick={() =>
-                              addStock(
-                                p.product_id,
-                                document.getElementById(`add-${p.product_id}`)
-                                  .value
-                              )
-                            }
-                            className="text-blue-600 border border-blue-600 px-2 py-1 rounded hover:bg-blue-600 hover:text-white transition text-sm"
-                          >
-                            +Stock
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => deleteProduct(p.product_id)}
-                          className="text-red-600 border border-red-600 px-2 py-1 rounded hover:bg-red-600 hover:text-white transition text-sm"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
-        <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-4">
-          <h2 className="text-lg font-semibold text-white">
-            📦 Sales Overview
-          </h2>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-gray-700">
-            <thead className="bg-gray-100 border-b text-gray-600 uppercase text-xs tracking-wider">
-              <tr>
-                <th className="p-3 text-left">Product</th>
-                <th className="p-3 text-left">Category</th>
-                <th className="p-3 text-left">Quantity</th>
-                <th className="p-3 text-left">Price</th>
-                <th className="p-3 text-left">Stock Count</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sales.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan="5"
-                    className="text-center text-gray-500 py-6 italic bg-gray-50"
-                  >
-                    No products found
-                  </td>
-                </tr>
-              ) : (
-                sales.map((p, i) => (
-                  <tr
-                    key={p.sale_id}
-                    className={`border-b hover:bg-blue-50 transition ${
-                      i % 2 === 0 ? "bg-white" : "bg-gray-50"
-                    }`}
-                  >
-                    <td className="p-3 font-medium text-gray-800">
-                      {p.product.product_name}
-                    </td>
-
-                    <td className="p-3">
-                      {p.product.category?.category_name || "-"}
-                    </td>
-
-                    {/* NEW: Quantity */}
-                    <td className="p-3 font-semibold text-gray-800">
-                      {p.quantity}
-                    </td>
-
-                    {/* NEW: Price */}
-                    <td className="p-3 font-semibold text-gray-800">
-                      ₹{p.price}
-                    </td>
-
-                    <td className="p-3 font-semibold text-blue-700">
-                      {p.product.stocks?.reduce(
-                        (sum, s) => sum + s.quantity,
-                        0
-                      ) || 0}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
       </div>
     </div>
   );

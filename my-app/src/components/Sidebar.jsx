@@ -1,88 +1,105 @@
 import { useState } from "react";
-import { User, Box, ShoppingCart, LogOut, Menu, X, Tag } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { 
+  LayoutDashboard, 
+  ShoppingCart, 
+  Tags, 
+  LogOut, 
+  Menu, 
+  X, 
+  UserCircle 
+} from "lucide-react";
 
-export default function Sidebar({ role }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  function logout(e) {
-    e.preventDefault();
+export default function Sidebar({ role, user }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const location = useLocation();
+
+  const handleLogout = () => {
     localStorage.removeItem("token");
     window.location.reload();
-  }
-  return (
-    <>
-      {/* Sidebar */}
-      <aside
-        className={`fixed md:relative top-0 left-0 h-full md:h-auto w-64 bg-blue-700 text-white flex flex-col justify-between p-6 shadow-lg transform transition-transform duration-300 z-50
-        ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+  };
+
+  const NavItem = ({ to, icon: Icon, label }) => {
+    const isActive = location.pathname === to;
+    return (
+      <Link
+        to={to}
+        onClick={() => setIsOpen(false)}
+        className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${
+          isActive
+            ? "bg-blue-600 text-white shadow-md"
+            : "text-gray-600 hover:bg-blue-50 hover:text-blue-600"
         }`}
       >
-        <div>
-          {/* <div className="flex items-center mb-8">
-            <img
-              src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
-              alt="profile"
-              className="w-12 h-12 rounded-full border-2 border-white"
-            />
-            <div className="ml-3">
-              <h2 className="font-semibold text-lg">Anuranth</h2>
-              <p className="text-sm text-blue-200">Inventory Admin</p>
-            </div>
-          </div> */}
+        <Icon size={20} className={isActive ? "text-white" : "text-gray-500 group-hover:text-blue-600"} />
+        <span className="font-medium">{label}</span>
+      </Link>
+    );
+  };
 
-          <nav className="space-y-3">
-            <Link
-              to="/"
-              className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition"
-            >
-              <Box size={18} /> Inventory
-            </Link>
-            <Link
-              to="/sales"
-              className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition"
-            >
-              <ShoppingCart size={18} /> Sales
-            </Link>
-            {role == "admin" && (
-              <Link
-                to="/categories"
-                className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition"
-              >
-                <Tag size={18} /> Categories
-              </Link>
-            )}
+  return (
+    <>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="md:hidden fixed top-4 right-4 z-50 p-2 bg-white rounded-lg shadow-md text-gray-700"
+      >
+        {isOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
 
-            {/* <button className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition">
-              <User size={18} /> Profile
-            </button> */}
-          </nav>
-        </div>
-
-        <button
-          onClick={logout}
-          className="flex items-center gap-2 p-2 rounded hover:bg-blue-600 transition mt-8"
-        >
-          <LogOut size={18} /> Logout
-        </button>
-      </aside>
-
-      {/* Overlay for mobile */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-40 md:hidden z-40"
-          onClick={() => setSidebarOpen(false)}
-        ></div>
+      {/* Overlay */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-sm"
+          onClick={() => setIsOpen(false)}
+        />
       )}
 
-      {/* Mobile menu toggle button */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="md:hidden fixed top-4 left-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-2 shadow-md z-50"
+      {/* Sidebar Container */}
+      <aside
+        className={`fixed md:relative inset-y-0 left-0 w-72 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out z-40 flex flex-col
+        ${isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+        `}
       >
-        {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-        <span>{sidebarOpen ? "Close" : "Menu"}</span>
-      </button>
+        {/* Header */}
+        <div className="p-6 border-b border-gray-100 flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-blue-200">
+            SI
+          </div>
+          <div>
+            <h1 className="font-bold text-gray-800 text-lg leading-tight">Smart Inv</h1>
+            <p className="text-xs text-gray-500">Management System</p>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <NavItem to="/" icon={LayoutDashboard} label="Dashboard" />
+          <NavItem to="/sales" icon={ShoppingCart} label="Sales" />
+          {role === "admin" && (
+            <NavItem to="/categories" icon={Tags} label="Categories" />
+          )}
+        </nav>
+
+        {/* User Profile & Logout */}
+        <div className="p-4 border-t border-gray-100 bg-gray-50">
+          <div className="flex items-center gap-3 mb-4 px-2">
+            <div className="bg-blue-100 p-2 rounded-full text-blue-600">
+              <UserCircle size={24} />
+            </div>
+            <div className="overflow-hidden">
+              <p className="font-semibold text-sm text-gray-900 truncate capitalize">{user?.username || "User"}</p>
+              <p className="text-xs text-gray-500 capitalize">{role}</p>
+            </div>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 bg-white border border-gray-200 text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 px-4 py-2 rounded-lg transition-colors text-sm font-medium"
+          >
+            <LogOut size={16} /> Logout
+          </button>
+        </div>
+      </aside>
     </>
   );
 }
