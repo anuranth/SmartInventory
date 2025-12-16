@@ -33,6 +33,7 @@ export default function Dashboard() {
       if (!res.ok) return setProducts([]);
       const data = await res.json();
       setProducts(data);
+      
     } catch (err) {
       console.error("Error loading products:", err);
     }
@@ -417,7 +418,6 @@ export default function Dashboard() {
                     <td className="p-3">
                       {p.product.category?.category_name || "-"}
                     </td>
-
 
                     {/* NEW: Quantity */}
                     <td className="p-3 font-semibold text-gray-800">

@@ -83,37 +83,58 @@ app.post("/api/products", async (req, res) => {
 });
 
 app.post("/api/sales", async (req, res) => {
+  console.log("\n=== /api/sales REQUEST RECEIVED ===");
+
   try {
+    // Log incoming request body
+    console.log("📩 Incoming Body:", req.body);
+
     const { productId, quantity, date, price } = req.body;
 
     if (!productId || !quantity || !date || !price) {
+      console.log("❌ Missing fields");
       return res.status(400).json({
         error: "productId, quantity, date, and price are required",
       });
     }
 
+    console.log("➡️ Validating product:", productId);
+
+    // Fetch product + stock
     const product = await prisma.product.findUnique({
       where: { product_id: Number(productId) },
       include: { stocks: true },
     });
 
+    console.log("📦 Product fetched:", product);
+
     if (!product) {
+      console.log("❌ Product not found");
       return res.status(404).json({ error: "Product not found" });
     }
 
-    // Calculate total stock
     const totalStock = product.stocks.reduce(
       (sum, entry) => sum + entry.quantity,
       0
     );
 
+    console.log("📊 Total stock available:", totalStock);
+
     if (Number(quantity) > totalStock) {
+      console.log("❌ Not enough stock");
       return res.status(400).json({
         error: `Not enough stock. Available: ${totalStock}`,
       });
     }
 
-    // Record the sale
+    console.log("📝 Recording sale with:", {
+      productId: Number(productId),
+      quantity: Number(quantity),
+      date: new Date(date),
+      price: Number(price),
+    });
+
+    // Create sale
     const newSale = await prisma.sales.create({
       data: {
         productId: Number(productId),
@@ -123,21 +144,32 @@ app.post("/api/sales", async (req, res) => {
       },
     });
 
-    // Deduct stock (negative stock entry)
-    await prisma.stock.create({
+    console.log("✅ Sale created:", newSale);
+
+    console.log("🔻 Deducting stock with:", {
+      productId: Number(productId),
+      quantity: -Number(quantity),
+    });
+
+    // Deduct stock
+    const stockUpdate = await prisma.stock.create({
       data: {
-        productId: Number(productId),
+        productId: Number(productId), // LOG WILL PROVE IF THIS IS WRONG FIELD NAME
         quantity: -Number(quantity),
         date: new Date(),
       },
     });
 
-    res.json({
-      message: "Sale recorded and stock updated",
-      sale: newSale,
-    });
+    console.log("📉 Stock deducted:", stockUpdate);
+
+    res.json(newSale);
   } catch (err) {
-    console.error("Error processing sale:", err);
+    console.error("\n🔥 ERROR in /api/sales:", err);
+
+    // Log Prisma errors clearly
+    if (err.code) console.error("🔍 Prisma Error Code:", err.code);
+    if (err.meta) console.error("📌 Prisma Error Meta:", err.meta);
+
     res.status(500).json({ error: "Failed to record sale" });
   }
 });
@@ -324,8 +356,9 @@ app.post("/api/login", async (req, res) => {
 
 // Signup route
 app.post("/api/signup", async (req, res) => {
+  console.log("signup");
   try {
-    const { username, password, role } = req.body;
+    const { username, password } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({
@@ -352,7 +385,7 @@ app.post("/api/signup", async (req, res) => {
       data: {
         username,
         password: hashedPassword,
-        role: role || "user", // default role
+        role: "admin",
       },
     });
 

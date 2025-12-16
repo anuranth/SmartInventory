@@ -1,6 +1,6 @@
 import { PlusCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-// import jsPDF from "jspdf";
+import jsPDF from "jspdf";
 
 const PRODUCTS_API = "http://localhost:5000/api/products";
 const SALES_API = "http://localhost:5000/api/sales";

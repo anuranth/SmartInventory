@@ -51,9 +51,10 @@ export default function SignUp({ onLogin }) {
             type="submit"
             className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
           >
-            Login
+            Sign Up
           </button>
         </form>
+        <a href="/login">Login</a>
       </div>
     </div>
   );

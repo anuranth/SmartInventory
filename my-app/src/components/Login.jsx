@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { redirect } from "react-router-dom";
+import { redirect, useNavigate } from "react-router-dom";
 
 const LOGIN_API = "http://localhost:5000/api/login";
 export default function Login({ onLogin, user }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const navigate = useNavigate();
 
   if (user) {
     redirect("/");
@@ -24,6 +25,7 @@ export default function Login({ onLogin, user }) {
       if (res.ok) {
         localStorage.setItem("token", data.token);
         onLogin(data); // data includes role
+        navigate("/");
       } else {
         alert(data.error);
       }

@@ -19,7 +19,7 @@ export default function Sidebar({ role }) {
         }`}
       >
         <div>
-          <div className="flex items-center mb-8">
+          {/* <div className="flex items-center mb-8">
             <img
               src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
               alt="profile"
@@ -29,7 +29,7 @@ export default function Sidebar({ role }) {
               <h2 className="font-semibold text-lg">Anuranth</h2>
               <p className="text-sm text-blue-200">Inventory Admin</p>
             </div>
-          </div>
+          </div> */}
 
           <nav className="space-y-3">
             <Link
@@ -53,9 +53,9 @@ export default function Sidebar({ role }) {
               </Link>
             )}
 
-            <button className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition">
+            {/* <button className="flex items-center gap-2 p-2 w-full text-left rounded hover:bg-blue-600 transition">
               <User size={18} /> Profile
-            </button>
+            </button> */}
           </nav>
         </div>
 
